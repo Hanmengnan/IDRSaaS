@@ -4,13 +4,13 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, TensorDataset
-from torch.autograd import Variable
+
 from sklearn.preprocessing import MinMaxScaler
 
 import matplotlib.pyplot as plt
+import pywt
 
 
 class EarlyStopping:
@@ -81,7 +81,7 @@ def validate(model, criterion, dataloader):
     return epoch_loss
 
 
-def train_model(train_x, train_y, val_x, val_y, model, epochs, batch_size, device, patience=3):
+def train(train_x, train_y, val_x, val_y, model, epochs, batch_size, device):
     train_x = torch.tensor(train_x, dtype=torch.float32).to(device)
     train_y = torch.tensor(train_y, dtype=torch.float32).to(device)
     dataset = TensorDataset(train_x, train_y)
@@ -133,40 +133,91 @@ def train_model(train_x, train_y, val_x, val_y, model, epochs, batch_size, devic
     return model
 
 
-def split_array_by_step(arr, k):
-    return [arr[i:i+k] for i in range(0, len(arr)-k)]
+# 小波滤噪
+def wavelet_denoising(data):
+    # 小波函数取db8
+    db4 = pywt.Wavelet('db8')
+
+    # 分解
+    coeffs = pywt.wavedec(data, db4)
+    # 高频系数置零
+    coeffs[len(coeffs)-1] *= 0
+    coeffs[len(coeffs)-2] *= 0
+    # 重构
+    meta = pywt.waverec(coeffs, db4)
+    meta = meta[:len(data)]
+    return meta
 
 
-def loadData(seq_num, chunk_num):
+def supplement_feature(df, K):
+    df["HTTP_RT"] = wavelet_denoising(df["HTTP_RT"])
+
+    df['Max_HTTP_RT'] = df['HTTP_RT'].rolling(window=K).max()
+    df['Min_HTTP_RT'] = df['HTTP_RT'].rolling(window=K).min()
+    df['Mean_HTTP_RT'] = df['HTTP_RT'].rolling(window=K).mean()
+
+    df_no_nan = df.dropna()
+    return df_no_nan
+
+
+def split_array_by_step(df, K):
+    if len(df) == 0:
+        return []
+    # supplement more feature
+    more_feature_df = supplement_feature(df, K)
+    more_feature_df = more_feature_df[[
+        "HTTP_RT",	"Max_HTTP_RT",	"Min_HTTP_RT",	"Mean_HTTP_RT"]]
+    # normalizate 归一化
+    scaler = MinMaxScaler()
+    more_feature_df[["HTTP_RT", "Max_HTTP_RT", "Min_HTTP_RT", "Mean_HTTP_RT"]] = scaler.fit_transform(
+        more_feature_df[["HTTP_RT", "Max_HTTP_RT", "Min_HTTP_RT", "Mean_HTTP_RT"]])
+    # 遍历 DataFrame 的每一行，跳过前 K 行
+    result = []
+    for i in range(0, len(more_feature_df) - K, 1):
+        window = more_feature_df.iloc[i:i+K]
+        result.append(window)
+
+    return result
+
+
+def load_aimed_service(df, selected_ids):
+    # 提取包含所选id的所有行
+    selected_rows = []
+    for selected_id in selected_ids:
+        # 或者使用 df.loc[df['msinstanceid'] == selected_id]
+        rows = df.query('msinstanceid == @selected_id')
+        selected_rows.append(rows)
+
+    # 将提取的行组合成一个新的DataFrame
+    selected_rows_df = pd.concat(selected_rows)
+    return selected_rows_df
+
+
+def load_service_workload():
     chunksize = 10000
     reader = pd.read_csv(
         "/data/hmn_data/alibaba_cluster_data/MSRTQps_sort.csv", chunksize=chunksize)
 
-    df = pd.DataFrame()
-    index = 0
-    # 循环读取每个数据块并添加到DataFrame中
-    for index, chunk in enumerate(reader):
-        if index > chunk_num:
-            break
-        df = pd.concat([df, chunk])
+    tmp_df = pd.DataFrame()
+    for _, chunk in enumerate(reader):
+        tmp_df = pd.concat([tmp_df, chunk])
+    # 获取所有唯一的id值
+    unique_ids = tmp_df['msinstanceid'].unique()
+    # 从唯一的id值中随机选择三个，不放回
+    train_ids = np.random.choice(unique_ids, 3, replace=False)
+    # 从唯一的id值中随机选择两个，不放回
+    val_ids = np.random.choice(unique_ids, 2, replace=False)
+    # 从唯一的id值中随机选择一个，不放回
+    test_ids = np.random.choice(unique_ids, 1, replace=False)
 
-    grouped_df = df.groupby('msinstanceid')["HTTP_RT"].apply(
-        lambda x: split_array_by_step(x, seq_num+1)).reset_index()
+    train_df = load_aimed_service(tmp_df, train_ids)
+    val_df = load_aimed_service(tmp_df, val_ids)
+    test_df = load_aimed_service(tmp_df, test_ids)
 
-    combined_df = pd.DataFrame()
-
-    # 对于每个分组
-    for index, row in grouped_df.iterrows():
-        if len(row["HTTP_RT"]) > 0:
-            combined_df = pd.concat([combined_df, pd.DataFrame(
-                np.stack([arr for arr in row["HTTP_RT"]], axis=0))])
-
-    scaler = MinMaxScaler()
-    workload = scaler.fit_transform(combined_df)
-
-    return workload
+    return train_df, val_df, test_df
 
 
+# 将数据转换为LSTM模型的输入形式
 def create_sequences(data, time_steps=1):
     xs, ys = [], []
     for i in range(len(data)):
@@ -177,26 +228,3 @@ def create_sequences(data, time_steps=1):
 
 def save_model(model, path):
     torch.save(model.state_dict(), path)
-
-
-def save_result(y_test, arima_pred, n_beats_pred,
-                lstm_pred, bi_lstm_pred, attention_pred):
-
-    y_test = y_test.squeeze()
-    arima_pred = arima_pred.squeeze()
-    n_beats_pred = n_beats_pred.squeeze()
-    lstm_pred = lstm_pred.squeeze()
-    bi_lstm_pred = lstm_pred.squeeze()
-    attention_pred = lstm_pred.squeeze()
-
-    # 将这些数组组合成一个DataFrame对象
-    df = pd.concat([pd.Series(y_test),
-                    pd.Series(arima_pred),
-                    pd.Series(n_beats_pred),
-                    pd.Series(lstm_pred),
-                    pd.Series(bi_lstm_pred),
-                    pd.Series(attention_pred),
-                    ], axis=1)
-
-    # 将DataFrame对象写入CSV文件
-    df.to_csv('./my_data.csv', index=False)

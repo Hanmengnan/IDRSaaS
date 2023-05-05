@@ -15,14 +15,15 @@ class Attention(nn.Module):
         return attention_probs * lstm_out
 
 
-class LSTM_fun_PyTorch_att(nn.Module):
-    def __init__(self, input_dim, seq_len, ouput_dim, lstm_hidden_size=64, attention_size=128):
-        super(LSTM_fun_PyTorch_att, self).__init__()
+class BiLSTMAtteionModel(nn.Module):
+    def __init__(self, input_dim, seq_len, ouput_dim, lstm_hidden_size=64, num_layers=2, attention_size=128):
+        super(BiLSTMAtteionModel, self).__init__()
         self.conv1d = nn.Conv1d(input_dim, 32, kernel_size=1)
         self.relu = nn.ReLU()
         self.maxpool1d = nn.MaxPool1d(seq_len)
         self.dropout = nn.Dropout(0.1)
-        self.bilstm = nn.LSTM(32, lstm_hidden_size, bidirectional=True)
+        self.bilstm = nn.LSTM(32, lstm_hidden_size,
+                              num_layers=num_layers, bidirectional=True)
         self.attention = Attention(lstm_hidden_size, attention_size)
         self.fc = nn.Linear(lstm_hidden_size * 2, ouput_dim)
 

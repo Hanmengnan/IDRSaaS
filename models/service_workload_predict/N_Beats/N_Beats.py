@@ -50,8 +50,6 @@ class NBeatsModel:
         criterion = nn.MSELoss()
         optimizer = optim.Adam(model.parameters())
 
-        # scheduler = ReduceLROnPlateau(optimizer, patience=1, verbose=True)
-
         for epoch in range(epochs):
             running_loss = 0.0
             total_samples = 0
@@ -68,15 +66,6 @@ class NBeatsModel:
 
             epoch_loss = running_loss / total_samples
             print(f"Epoch {epoch + 1}/{epochs}, Loss: {epoch_loss:.6f}")
-
-            # 在每个epoch后进行验证并检查早停
-            # with torch.no_grad():
-            #     val_loss = NBeatsModel.validate(
-            #         model, criterion, val_dataloader)
-            #     print(f"Validation Loss: {val_loss:.6f}")
-
-            #     # 更新学习率
-            #     scheduler.step(val_loss)
 
         return model
 
