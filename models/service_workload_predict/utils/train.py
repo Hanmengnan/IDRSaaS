@@ -9,7 +9,6 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from sklearn.preprocessing import MinMaxScaler
 
-import matplotlib.pyplot as plt
 import pywt
 
 
@@ -90,14 +89,12 @@ def train(train_x, train_y, val_x, val_y, model, epochs, batch_size, device):
     val_x = torch.tensor(val_x, dtype=torch.float32).to(device)
     val_y = torch.tensor(val_y, dtype=torch.float32).to(device)
     val_dataset = TensorDataset(val_x, val_y)
-    val_dataloader = DataLoader(
-        val_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
 
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters())
 
     scheduler = ReduceLROnPlateau(optimizer, patience=1, verbose=True)
-    # early_stopping = EarlyStopping(patience=patience, verbose=True)
 
     for epoch in range(epochs):
         running_loss = 0.0
@@ -124,12 +121,6 @@ def train(train_x, train_y, val_x, val_y, model, epochs, batch_size, device):
             # 更新学习率
             scheduler.step(val_loss)
 
-            # 检查早停
-            # early_stopping(val_loss, model)
-            # if early_stopping.early_stop:
-            #     print("Early stopping")
-            #     break
-
     return model
 
 
@@ -141,8 +132,8 @@ def wavelet_denoising(data):
     # 分解
     coeffs = pywt.wavedec(data, db4)
     # 高频系数置零
-    coeffs[len(coeffs)-1] *= 0
-    coeffs[len(coeffs)-2] *= 0
+    coeffs[len(coeffs) - 1] *= 0
+    coeffs[len(coeffs) - 2] *= 0
     # 重构
     meta = pywt.waverec(coeffs, db4)
     meta = meta[:len(data)]
@@ -150,11 +141,11 @@ def wavelet_denoising(data):
 
 
 def supplement_feature(df, K):
-    df["HTTP_RT"] = wavelet_denoising(df["HTTP_RT"])
+    df["Hu0_polyfit"] = df['HTTP_RT'].rolling(window=K).apply(lambda y: np.polyfit(range(K), y, 1)[0] if len(y.dropna()) == K else np.nan)
+    df["Mean_HTTP_RT"] = df['HTTP_RT'].rolling(window=K).mean()
+    df["Median_HTTP_RT"] = df['HTTP_RT'].rolling(window=K).median()
 
-    df['Max_HTTP_RT'] = df['HTTP_RT'].rolling(window=K).max()
-    df['Min_HTTP_RT'] = df['HTTP_RT'].rolling(window=K).min()
-    df['Mean_HTTP_RT'] = df['HTTP_RT'].rolling(window=K).mean()
+    df["HTTP_RT"] = wavelet_denoising(df["HTTP_RT"])
 
     df_no_nan = df.dropna()
     return df_no_nan
@@ -165,16 +156,14 @@ def split_array_by_step(df, K):
         return []
     # supplement more feature
     more_feature_df = supplement_feature(df, K)
-    more_feature_df = more_feature_df[[
-        "HTTP_RT",	"Max_HTTP_RT",	"Min_HTTP_RT",	"Mean_HTTP_RT"]]
+    more_feature_df = more_feature_df[["HTTP_RT", "Max_HTTP_RT", "Min_HTTP_RT", "Mean_HTTP_RT"]]
     # normalizate 归一化
     scaler = MinMaxScaler()
-    more_feature_df[["HTTP_RT", "Max_HTTP_RT", "Min_HTTP_RT", "Mean_HTTP_RT"]] = scaler.fit_transform(
-        more_feature_df[["HTTP_RT", "Max_HTTP_RT", "Min_HTTP_RT", "Mean_HTTP_RT"]])
+    more_feature_df[["HTTP_RT", "Max_HTTP_RT", "Min_HTTP_RT", "Mean_HTTP_RT"]] = scaler.fit_transform(more_feature_df[["HTTP_RT", "Max_HTTP_RT", "Min_HTTP_RT", "Mean_HTTP_RT"]])
     # 遍历 DataFrame 的每一行，跳过前 K 行
     result = []
     for i in range(0, len(more_feature_df) - K, 1):
-        window = more_feature_df.iloc[i:i+K]
+        window = more_feature_df.iloc[i:i + K]
         result.append(window)
 
     return result
@@ -195,8 +184,7 @@ def load_aimed_service(df, selected_ids):
 
 def load_service_workload():
     chunksize = 10000
-    reader = pd.read_csv(
-        "/data/hmn_data/alibaba_cluster_data/MSRTQps_sort.csv", chunksize=chunksize)
+    reader = pd.read_csv("/data/hmn_data/alibaba_cluster_data/MSRTQps_sort.csv", chunksize=chunksize)
 
     tmp_df = pd.DataFrame()
     for _, chunk in enumerate(reader):
