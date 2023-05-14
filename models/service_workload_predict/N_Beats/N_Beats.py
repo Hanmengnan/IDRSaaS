@@ -9,10 +9,10 @@ from nbeats_pytorch.model import NBeatsNet
 
 class NBeatsModel:
     @staticmethod
-    def model(input_dim=10, output_dim=1, hidden_size=32):
+    def model(input_dim=10, output_dim=1, nb_blocks_per_stack=3, thetas_dim=4, hidden_size=32):
         model = NBeatsNet(stack_types=('generic', 'generic'),
-                          nb_blocks_per_stack=3,
-                          thetas_dim=(4, 4),
+                          nb_blocks_per_stack=nb_blocks_per_stack,
+                          thetas_dim=(thetas_dim, thetas_dim),
                           forecast_length=output_dim,
                           backcast_length=input_dim,
                           hidden_layer_units=hidden_size,
@@ -35,7 +35,8 @@ class NBeatsModel:
         return epoch_loss
 
     @staticmethod
-    def train_model(train_x, train_y, val_x, val_y, model, epochs, batch_size, device, patience=3):
+    def train(train_x, train_y, val_x, val_y, model, epochs, batch_size, device, patience=3):
+        loss_array, val_loss_array = [], []
         train_x = torch.tensor(train_x, dtype=torch.float32).to(device)
         train_y = torch.tensor(train_y, dtype=torch.float32).to(device)
         dataset = TensorDataset(train_x, train_y)
@@ -49,6 +50,8 @@ class NBeatsModel:
 
         criterion = nn.MSELoss()
         optimizer = optim.Adam(model.parameters())
+
+        scheduler = ReduceLROnPlateau(optimizer, patience=1, verbose=True)
 
         for epoch in range(epochs):
             running_loss = 0.0
@@ -65,9 +68,18 @@ class NBeatsModel:
                 total_samples += batch_x.size(0)
 
             epoch_loss = running_loss / total_samples
+            loss_array.append(epoch_loss)
             print(f"Epoch {epoch + 1}/{epochs}, Loss: {epoch_loss:.6f}")
 
-        return model
+            # 在每个epoch后进行验证并检查早停
+            with torch.no_grad():
+                val_loss = NBeatsModel.validate(model, criterion, val_dataloader)
+                val_loss_array.append(val_loss)
+                print(f"Validation Loss: {val_loss:.6f}")
+                # 更新学习率
+                scheduler.step(val_loss)
+
+        return model, loss_array, val_loss_array
 
     @staticmethod
     def predict(model, predict_x, device):

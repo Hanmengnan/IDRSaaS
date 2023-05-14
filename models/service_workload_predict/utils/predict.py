@@ -56,24 +56,17 @@ def plot_predictions(pred_tensors, actual):
     plt.savefig('./data/img/result.jpg', dpi=800)
 
 
-def save_result(y_test, arima_pred, n_beats_pred,
-                lstm_pred, bi_lstm_pred, attention_pred):
+def save_result(pred_tensors, actual):
+    df = actual.numpy()
+    # 将向量与字典中的张量按列拼接
+    for entry in pred_tensors:
+        tensor = entry["tensor"]
+        numpy_array = tensor.numpy()
+        df = np.hstack((df, numpy_array))
 
-    y_test = y_test.squeeze()
-    arima_pred = arima_pred.squeeze()
-    n_beats_pred = n_beats_pred.squeeze()
-    lstm_pred = lstm_pred.squeeze()
-    bi_lstm_pred = lstm_pred.squeeze()
-    attention_pred = lstm_pred.squeeze()
+    # 准备列标题
+    column_names = ['Original'] + [entry["model_name"] for entry in pred_tensors]
 
-    # 将这些数组组合成一个DataFrame对象
-    df = pd.concat([pd.Series(y_test),
-                    pd.Series(arima_pred),
-                    pd.Series(n_beats_pred),
-                    pd.Series(lstm_pred),
-                    pd.Series(bi_lstm_pred),
-                    pd.Series(attention_pred),
-                    ], axis=1)
-
-    # 将DataFrame对象写入CSV文件
-    df.to_csv('./my_data.csv', index=False)
+    # 将 NumPy 数组保存到 CSV 文件中
+    df = pd.DataFrame(df, columns=column_names)
+    df.to_csv("output.csv", index=False)

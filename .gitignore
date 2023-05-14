@@ -15,3 +15,6 @@
 # vendor/
 
 *.pyc
+*.log
+*.pt
+*.jpg

@@ -2,38 +2,33 @@ import torch
 import torch.nn as nn
 
 
-class Attention(nn.Module):
-    def __init__(self, lstm_hidden_size, attention_size):
-        super(Attention, self).__init__()
+class AdditiveAttention(nn.Module):
+    def __init__(self, lstm_hidden_size):
+        super(AdditiveAttention, self).__init__()
         self.lstm_hidden_size = lstm_hidden_size
-        self.attention_size = attention_size
-        self.attention_vec = nn.Linear(lstm_hidden_size * 2, attention_size)
-        self.sigmoid = nn.Sigmoid()
+        self.attention_vec = nn.Linear(lstm_hidden_size * 2, 1)
+        self.tanh = nn.Tanh()
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, lstm_out):
-        attention_probs = self.sigmoid(self.attention_vec(lstm_out))
-        return attention_probs * lstm_out
+        attention_weights = self.tanh(self.attention_vec(lstm_out))
+        attention_weights = self.softmax(attention_weights)
+        return torch.sum(attention_weights * lstm_out, dim=1)
 
 
-class BiLSTMAtteionModel(nn.Module):
-    def __init__(self, input_dim, seq_len, ouput_dim, lstm_hidden_size=64, num_layers=2, attention_size=128):
-        super(BiLSTMAtteionModel, self).__init__()
-        self.conv1d = nn.Conv1d(input_dim, 32, kernel_size=1)
-        self.relu = nn.ReLU()
-        self.maxpool1d = nn.MaxPool1d(seq_len)
+class BiLSTMAttentionModel(nn.Module):
+    def __init__(self, input_dim, output_dim, hidden_dim=64, num_layers=2):
+        super(BiLSTMAttentionModel, self).__init__()
         self.dropout = nn.Dropout(0.1)
-        self.bilstm = nn.LSTM(32, lstm_hidden_size,
-                              num_layers=num_layers, bidirectional=True)
-        self.attention = Attention(lstm_hidden_size, attention_size)
-        self.fc = nn.Linear(lstm_hidden_size * 2, ouput_dim)
+        self.bilstm = nn.LSTM(input_dim, hidden_dim,
+                              num_layers=num_layers, bidirectional=True, batch_first=True)
+        self.attention = AdditiveAttention(hidden_dim)
+        self.fc = nn.Linear(hidden_dim * 2, output_dim)
 
     def forward(self, inputs):
-        x = self.conv1d(inputs)
-        x = self.relu(x)
-        x = self.maxpool1d(x)
-        x = self.dropout(x)
-        x = x.transpose(1, 2)
-        lstm_out, _ = self.bilstm(x)
+        inputs = inputs.transpose(1, 2)  # Transpose inputs to (batch_size, seq_len, input_dim)
+        lstm_out, _ = self.bilstm(inputs)
+        lstm_out = self.dropout(lstm_out)
         attention_mul = self.attention(lstm_out)
         output = self.fc(attention_mul)
-        return output.squeeze(-1)
+        return output

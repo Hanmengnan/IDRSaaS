@@ -81,6 +81,8 @@ def validate(model, criterion, dataloader):
 
 
 def train(train_x, train_y, val_x, val_y, model, epochs, batch_size, device):
+    loss_array, val_loss_array = [], []
+
     train_x = torch.tensor(train_x, dtype=torch.float32).to(device)
     train_y = torch.tensor(train_y, dtype=torch.float32).to(device)
     dataset = TensorDataset(train_x, train_y)
@@ -94,7 +96,7 @@ def train(train_x, train_y, val_x, val_y, model, epochs, batch_size, device):
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters())
 
-    scheduler = ReduceLROnPlateau(optimizer, patience=1, verbose=True)
+    scheduler = ReduceLROnPlateau(optimizer, patience=5, verbose=True)
 
     for epoch in range(epochs):
         running_loss = 0.0
@@ -111,18 +113,19 @@ def train(train_x, train_y, val_x, val_y, model, epochs, batch_size, device):
             total_samples += batch_x.size(0)
 
         epoch_loss = running_loss / total_samples
+        loss_array.append(epoch_loss)
         print(f"Epoch {epoch + 1}/{epochs}, Loss: {epoch_loss:.6f}")
 
         # 在每个epoch后进行验证并检查早停
         with torch.no_grad():
             val_loss = validate(model, criterion, val_dataloader)
+            val_loss_array.append(val_loss)
             print(f"Validation Loss: {val_loss:.6f}")
 
             # 更新学习率
             scheduler.step(val_loss)
 
-    return model
-
+    return model, loss_array, val_loss_array
 
 # 小波滤噪
 def wavelet_denoising(data):
@@ -141,7 +144,7 @@ def wavelet_denoising(data):
 
 
 def supplement_feature(df, K):
-    df["Hu0_polyfit"] = df['HTTP_RT'].rolling(window=K).apply(lambda y: np.polyfit(range(K), y, 1)[0] if len(y.dropna()) == K else np.nan)
+    df["Polyfit_HTTP_RT"] = df['HTTP_RT'].rolling(window=K).apply(lambda y: np.polyfit(range(K), y, 1)[0] if len(y.dropna()) == K else np.nan)
     df["Mean_HTTP_RT"] = df['HTTP_RT'].rolling(window=K).mean()
     df["Median_HTTP_RT"] = df['HTTP_RT'].rolling(window=K).median()
 
@@ -156,10 +159,14 @@ def split_array_by_step(df, K):
         return []
     # supplement more feature
     more_feature_df = supplement_feature(df, K)
-    more_feature_df = more_feature_df[["HTTP_RT", "Max_HTTP_RT", "Min_HTTP_RT", "Mean_HTTP_RT"]]
+    more_feature_df = more_feature_df[["HTTP_RT", "Polyfit_HTTP_RT", "Mean_HTTP_RT", "Median_HTTP_RT"]]
+
+    if len(more_feature_df) == 0:
+        return []
+
     # normalizate 归一化
     scaler = MinMaxScaler()
-    more_feature_df[["HTTP_RT", "Max_HTTP_RT", "Min_HTTP_RT", "Mean_HTTP_RT"]] = scaler.fit_transform(more_feature_df[["HTTP_RT", "Max_HTTP_RT", "Min_HTTP_RT", "Mean_HTTP_RT"]])
+    more_feature_df[["HTTP_RT", "Polyfit_HTTP_RT", "Mean_HTTP_RT", "Median_HTTP_RT"]] = scaler.fit_transform(more_feature_df[["HTTP_RT", "Polyfit_HTTP_RT", "Mean_HTTP_RT", "Median_HTTP_RT"]])
     # 遍历 DataFrame 的每一行，跳过前 K 行
     result = []
     for i in range(0, len(more_feature_df) - K, 1):
@@ -184,7 +191,7 @@ def load_aimed_service(df, selected_ids):
 
 def load_service_workload():
     chunksize = 10000
-    reader = pd.read_csv("/data/hmn_data/alibaba_cluster_data/MSRTQps_sort.csv", chunksize=chunksize)
+    reader = pd.read_csv("/data/hmn_data/alibaba_cluster_data/MSRT_Resource.csv", chunksize=chunksize)
 
     tmp_df = pd.DataFrame()
     for _, chunk in enumerate(reader):

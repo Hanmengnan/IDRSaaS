@@ -1,3 +1,5 @@
+from utils.train import *
+
 import sys
 import torch
 
@@ -5,22 +7,17 @@ from itertools import product
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.metrics import mean_squared_error
 
-sys.path.append('../')
+sys.path.append('../../')
 
-from ARIMA.ARIMA import ARIMA
-from N_Beats.N_Beats import NBeatsModel
-from Bi_LSTM_Attention.BI_LSTM_Attention import BiLSTMAtteionModel
-from Bi_LSTM.Bi_LSTM import BiLSTMModel
 from LSTM.LSTM import LSTMModel
-from train import *
+
 
 train_workload, val_workload, test_workload = load_service_workload()
 
 
 class PyTorchGridSearchCV(BaseEstimator, RegressorMixin):
 
-    def __init__(self, model_name, input_dim=4, output_dim=4, step_num=5, hidden_dim=32, num_layers=2, epochs=10, batch_size=32, device=None):
-        self.model_name = model_name
+    def __init__(self, input_dim=4, output_dim=4, step_num=5, hidden_dim=32, num_layers=2, epochs=30, batch_size=32, device=None):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.step_num = step_num
@@ -32,18 +29,8 @@ class PyTorchGridSearchCV(BaseEstimator, RegressorMixin):
             "cuda" if torch.cuda.is_available() else "cpu")
 
     def fit(self):
-        if self.model_name == "LSTM":
-            self.model = LSTMModel(self.input_dim, self.hidden_dim,
-                                   self.num_layers, self.output_dim).to(self.device)
-        elif self.model_name == "Bi-LSTM":
-            self.model = BiLSTMModel(self.input_dim, self.hidden_dim,
-                                     self.num_layers, self.output_dim).to(self.device)
-        elif self.model_name == "Bi-LSTM-Attention":
-            self.model = BiLSTMAtteionModel(
-                self.input_dim, self.step_num, self.output_dim, self.hidden_dim, self.num_layers).to(self.device)
-        elif self.model_name == "N-Beats":
-            self.model = NBeatsModel(self.step_num, self.output_dim,
-                                     self.hidden_dim).to(self.device)
+        self.model = LSTMModel(self.input_dim, self.hidden_dim,
+                               self.num_layers, self.output_dim).to(self.device)
 
         # 按照 msinstanceid 列分组
         train_grouped_df = train_workload.groupby('msinstanceid')
@@ -104,6 +91,8 @@ def custom_grid_search(model, param_grid):
         y_pred = model_instance.predict()
         score = mean_squared_error(model_instance.y_test, y_pred)
 
+        print(f"Score with parameters: {score}")
+
         if score < best_score:
             best_score = score
             best_params = params
@@ -114,11 +103,8 @@ def custom_grid_search(model, param_grid):
 
 if __name__ == "__main__":
     param_grid = {
-        'model_name': ['LSTM'],
-        'step_num': [2, 3, 5, 7],
         'num_layers': [1, 2, 4],
         'hidden_dim': [16, 32, 64],
-        'epochs': [10, 30, 50, 80, 100],
         'batch_size': [16, 32, 64],
     }
 

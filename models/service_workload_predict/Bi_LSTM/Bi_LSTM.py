@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class BiLSTMModel(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_layers, output_dim=1):
+    def __init__(self, input_dim, output_dim, hidden_dim, num_layers):
         super(BiLSTMModel, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
