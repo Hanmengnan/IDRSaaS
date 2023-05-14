@@ -25,7 +25,7 @@ class PyTorchGridSearchCV(BaseEstimator, RegressorMixin):
         self.device = device if device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def fit(self):
-        self.model = BiLSTMAttentionModel(self.input_dim, self.output_dim, self.step_num, self.hidden_dim, self.num_layers).to(self.device)
+        self.model = BiLSTMAttentionModel(self.input_dim, self.output_dim, self.hidden_dim, self.num_layers).to(self.device)
 
         # 按照 msinstanceid 列分组
         train_grouped_df = train_workload.groupby('msinstanceid')

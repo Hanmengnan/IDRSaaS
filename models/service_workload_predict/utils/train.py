@@ -199,9 +199,9 @@ def load_service_workload():
     # 获取所有唯一的id值
     unique_ids = tmp_df['msinstanceid'].unique()
     # 从唯一的id值中随机选择三个，不放回
-    train_ids = np.random.choice(unique_ids, 3, replace=False)
+    train_ids = np.random.choice(unique_ids, 5, replace=False)
     # 从唯一的id值中随机选择两个，不放回
-    val_ids = np.random.choice(unique_ids, 2, replace=False)
+    val_ids = np.random.choice(unique_ids, 3, replace=False)
     # 从唯一的id值中随机选择一个，不放回
     test_ids = np.random.choice(unique_ids, 1, replace=False)
 
