@@ -18,3 +18,9 @@
 *.log
 *.pt
 *.jpg
+*.png
+*.csv
+
+# vscode
+
+settings.json

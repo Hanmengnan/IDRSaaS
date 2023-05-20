@@ -22,19 +22,19 @@ def MSE_Loss(pred_tensors, actual_tensor):
         print("{model_name} MSE Validation Loss: {loss:.6f}".format(model_name=item["model_name"], loss=val_loss.item()))
 
 
-def MAPE_Loss(pred_tensors, actual_tensor):
+def MAE_Loss(pred_tensors, actual_tensor):
     criterion = nn.L1Loss()
     for item in pred_tensors:
         val_loss = criterion(item["tensor"], actual_tensor)
-        print("{model_name} MAPE Validation Loss: {loss:.6f}".format(model_name=item["model_name"], loss=val_loss.item()))
+        print("{model_name} MAE Validation Loss: {loss:.6f}".format(model_name=item["model_name"], loss=val_loss.item()))
 
 
-def MAE_Loss(pred_tensors, actual_tensor):
+def MAPE_Loss(pred_tensors, actual_tensor):
     for item in pred_tensors:
         pct_error = 100.0 * torch.abs((item["tensor"] - actual_tensor) / actual_tensor)
         isinf = torch.isinf(pct_error)
         pct_error = torch.masked_select(pct_error, ~isinf)
-        print("{model_name} MAE Validation Loss: {loss:.6f}".format(model_name=item["model_name"], loss=torch.mean(pct_error)))
+        print("{model_name} MAPE Validation Loss: {loss:.6f}%".format(model_name=item["model_name"], loss=torch.mean(pct_error)))
 
 
 def RMSE_Loss(pred_tensors, actual_tensor):
@@ -47,7 +47,7 @@ def RMSE_Loss(pred_tensors, actual_tensor):
         print("{model_name} RMSE Validation Loss: {loss:.6f}".format(model_name=item["model_name"], loss=root_mean_squared_error))
 
 
-def plot_predictions(pred_tensors, actual):
+def plot_predictions(pred_tensors, actual,path='./data/img/result.jpg'):
     color_palette = plt.get_cmap("tab10").colors
 
     plt.figure(figsize=(12, 6))
@@ -62,9 +62,8 @@ def plot_predictions(pred_tensors, actual):
             model_name=item["model_name"]), color=color_palette[index], linestyle=line_styles[index], linewidth=1.5)
 
     plt.legend()
+    plt.savefig(path, dpi=800)
     plt.show()
-    plt.savefig('./data/img/result.jpg', dpi=1200)
-
 
 def save_result(pred_tensors, actual):
     df = actual.numpy()
