@@ -13,3 +13,14 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+*.pyc
+*.log
+*.pt
+*.jpg
+*.png
+*.csv
+
+# vscode
+
+settings.json
